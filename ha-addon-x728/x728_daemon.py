@@ -164,7 +164,7 @@ def monitor_loop():
 
     while True:
         try:
-            voltage  = read_voltage(bus) if bus else None
+            voltage = read_voltage(bus) if bus else None
             capacity = read_capacity(bus) if bus else None
             ac_present = not bool(GPIO.input(GPIO_PLD)) if GPIO_AVAILABLE else None
 
@@ -172,7 +172,7 @@ def monitor_loop():
             battery_low = False
             if voltage is not None and SHUTDOWN_VOLTAGE > 0 and voltage < SHUTDOWN_VOLTAGE:
                 battery_low = True
-            if capacity is not None and SHUTDOWN_CAPACITY > 0 and capacity < SHUTDOWN_CAPACITY:
+            if capacity is not None and SHUTDOWN_CAPACITY >git 0 and capacity < SHUTDOWN_CAPACITY:
                 battery_low = True
 
             # Charging: AC present and not full
