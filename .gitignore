@@ -1,7 +1,10 @@
+#Certificate
+*.crt
+*.pem
+
 # IDE
 .idea/
 .vscode/
-.devcontainer/
 
 
 # HA development

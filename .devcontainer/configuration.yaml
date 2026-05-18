@@ -1,0 +1,14 @@
+homeassistant:
+  name: Home Dev
+
+debugpy:
+  start: false
+
+http:
+  server_port: 9125
+
+logger:
+  default: warning
+  logs:
+    pymeteobridgedata: debug
+    custom_components.meteobridge: debug
