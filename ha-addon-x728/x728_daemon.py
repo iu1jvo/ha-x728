@@ -23,7 +23,6 @@ import logging
 import os
 import struct
 import subprocess
-import sys
 import time
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -31,14 +30,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 # ---------------------------------------------------------------------------
 # Read configuration from environment variables (set by the add-on config)
 # ---------------------------------------------------------------------------
-HW_VERSION     = os.environ.get("HW_VERSION", "v2.1")   # "v1.x / v2.0" or "v2.1+"
-PORT           = int(os.environ.get("DAEMON_PORT", "8099"))
-POLL_INTERVAL  = int(os.environ.get("POLL_INTERVAL", "10"))   # seconds
+HW_VERSION = os.environ.get("HW_VERSION", "v2.1")   # "v1.x / v2.0" or "v2.1+"
+PORT = int(os.environ.get("DAEMON_PORT", "8099"))
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))   # seconds
 
 # Shutdown thresholds (0 = disabled)
-SHUTDOWN_VOLTAGE  = float(os.environ.get("SHUTDOWN_VOLTAGE", "3.00"))  # Volts
+SHUTDOWN_VOLTAGE = float(os.environ.get("SHUTDOWN_VOLTAGE", "3.00"))  # Volts
 SHUTDOWN_CAPACITY = int(os.environ.get("SHUTDOWN_CAPACITY", "5"))       # %
-SHUTDOWN_DELAY    = int(os.environ.get("SHUTDOWN_DELAY", "10"))         # seconds
+SHUTDOWN_DELAY = int(os.environ.get("SHUTDOWN_DELAY", "10"))         # seconds
 
 BUZZER_ON_AC_LOSS = os.environ.get("BUZZER_ON_AC_LOSS", "true").lower() == "true"
 
@@ -50,12 +49,12 @@ else:
     GPIO_SHUTDOWN = 26
     HW_LABEL = f"X728 {HW_VERSION}"
 
-GPIO_PLD    = 6
+GPIO_PLD = 6
 GPIO_BUZZER = 20
-GPIO_BOOT   = 12
+GPIO_BOOT = 12
 
 I2C_ADDR = 0x36
-I2C_BUS  = 1
+I2C_BUS = 1
 
 # ---------------------------------------------------------------------------
 logging.basicConfig(
@@ -165,13 +164,13 @@ def monitor_loop():
 
     while True:
         try:
-            voltage  = read_voltage(bus)  if bus else None
+            voltage  = read_voltage(bus) if bus else None
             capacity = read_capacity(bus) if bus else None
             ac_present = not bool(GPIO.input(GPIO_PLD)) if GPIO_AVAILABLE else None
 
             # Derive states
             battery_low = False
-            if voltage  is not None and SHUTDOWN_VOLTAGE  > 0 and voltage  < SHUTDOWN_VOLTAGE:
+            if voltage is not None and SHUTDOWN_VOLTAGE > 0 and voltage < SHUTDOWN_VOLTAGE:
                 battery_low = True
             if capacity is not None and SHUTDOWN_CAPACITY > 0 and capacity < SHUTDOWN_CAPACITY:
                 battery_low = True
