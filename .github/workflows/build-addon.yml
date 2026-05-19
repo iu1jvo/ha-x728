@@ -60,18 +60,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push ${{ matrix.arch }} image
+      - name: Build and push image
         uses: docker/build-push-action@v5
         with:
           context: ./ha-addon-x728
           file: ./ha-addon-x728/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/arm64,linux/arm/v7
           push: true
           build-args: |
-            BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base-alpine-python:3.11
+            BUILD_FROM=ghcr.io/home-assistant/base-python:3.13-alpine3.21
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.arch }}:${{ steps.tag.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/${{ matrix.arch }}:latest
+            ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ steps.tag.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/ha-addon-x728:latest
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           labels: |
