@@ -2,8 +2,6 @@
 
 ## Index
 
-## Index
-
 1. [Introduction](#introduction)
 2. [Entities created](#entities-created)
 3. [Hardware GPIO reference](#hardware-gpio-reference)
