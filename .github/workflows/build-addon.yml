@@ -112,12 +112,6 @@ jobs:
         run: |
           docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/ha-addon-x728:latest \
             ghcr.io/${{ github.repository_owner }}/ha-addon-x728:latest-aarch64
-                - name: Create and push version manifest
-              run: |
-                docker buildx build --push \
-                  --tag ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ steps.tag.outputs.version }} \
-                  --manifest ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ steps.tag.outputs.version }}-aarch64 \
-                  oci-layout://
 
   release:
     name: Create GitHub Release
