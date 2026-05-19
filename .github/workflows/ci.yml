@@ -11,9 +11,9 @@ jobs:
     name: Python lint (daemon)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -30,15 +30,15 @@ jobs:
     name: Validate HA integration structure
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-  
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-    
+
       - name: Install hassfest dependencies
         run: pip install homeassistant voluptuous
-    
+
       - name: Check manifest.json fields
         run: |
           python3 - <<'EOF'
@@ -52,7 +52,7 @@ jobs:
               sys.exit(1)
           print("manifest.json OK:", m["domain"], m["version"])
           EOF
-    
+
       - name: Check translations exist
         run: |
           test -f custom_components/x728/translations/en.json && echo "translations/en.json OK"
@@ -62,9 +62,9 @@ jobs:
     name: Validate add-on config.yaml
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 

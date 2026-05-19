@@ -1,5 +1,24 @@
 # ha-x728 — Geekworm X728 UPS for Home Assistant OS
 
+## Index
+
+## Index
+
+1. [Introduction](#introduction)
+2. [Entities created](#entities-created)
+3. [Hardware GPIO reference](#hardware-gpio-reference)
+4. [Add-on configuration options](#add-on-configuration-options)
+5. [Installation](#installation)
+    1. [Add-on](#1--add-on)
+    2. [Custom Integration (HACS)](#2--custom-integration-hacs)
+6. [REST API](#rest-api)
+7. [Enable Debug Logging](#enable-debug-logging)
+8. [Contribute To The Project](#contribute-to-the-project)
+    1. [Integration](#integration)
+    2. [Add-On](#add-on)
+9. [Credits](#credits)
+
+## Introduction
 Full integration between the [Geekworm X728 UPS HAT](https://wiki.geekworm.com/X728) and **Home Assistant OS** (HAOS).
 
 Consists of two parts that work together:
@@ -92,6 +111,42 @@ Response example:
 ```
 
 ---
+
+## Enable Debug Logging
+
+If logs are needed for debugging or reporting an issue, use the following configuration.yaml:
+
+```yaml
+logger:
+  default: error
+  logs:
+    custom_components.meteobridge: debug
+```
+
+## Contribute To The Project
+
+### Integration
+
+1. Fork and clone the repository.
+2. Open in VSCode and choose to open in devcontainer. Must have VSCode devcontainer prerequisites.
+3. Run the command container start from VSCode terminal
+4. A fresh Home Assistant test instance will install and will eventually be running on port 9125 with this integration running
+5. When the container is running, go to http://localhost:9125 and the add Meteobridge from the Integration Page.
+
+### Add-On
+1. Fork and clone the repository.
+2. Open in VSCode. To test the add-on, there are two way:
+    1. Chose to open in a dev container, the integation will start and run in simulation mode.
+    2. run the add-on script in a terminal:
+        ```bash
+        cd ha-addon-x728
+        SHUTDOWN_VOLTAGE=3.5 SHUTDOWN_CAPACITY=10 DAEMON_PORT=8099 python3 x728_daemon.py
+        ```
+3. Test the exposed API REST in an another terminal window:
+    ```bash
+    curl -s http://localhost:8099/api/x728 | python3 -m json.tool
+    ```
+    or opening `http://localhost:<DAEMON_PORT>` in a browser.
 
 ## Credits
 
