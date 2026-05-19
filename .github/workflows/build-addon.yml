@@ -29,10 +29,10 @@ jobs:
         include:
           - arch: aarch64
             platform: linux/arm64
-            base_image: ghcr.io/home-assistant/base-python:3.13-alpine
+            base_image: ghcr.io/home-assistant/base-python:2026.04.0
           - arch: armv7
             platform: linux/arm/v7
-            base_image: ghcr.io/home-assistant/base-python:3.13-alpine
+            base_image: ghcr.io/home-assistant/base-python:2026.04.0
 
     steps:
       - name: Resolve tag name
