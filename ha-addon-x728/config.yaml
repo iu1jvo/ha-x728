@@ -9,6 +9,7 @@ arch:
 # Hardware access
 privileged:
   - SYS_RAWIO
+  - DAC_OVERRIDE
 devices:
   - /dev/i2c-1:/dev/i2c-1
   - /dev/gpiochip0:/dev/gpiochip0

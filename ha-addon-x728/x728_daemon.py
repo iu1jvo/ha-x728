@@ -68,15 +68,23 @@ logging.basicConfig(
 log = logging.getLogger("x728")
 
 # ---------------------------------------------------------------------------
-# Import RPi.GPIO gracefully (may not be available in dev/test environments)
+# Global Hardware State & Graceful Imports
 # ---------------------------------------------------------------------------
+gpio_lines = {}
+GPIO_AVAILABLE = False
+I2C_AVAILABLE = False
+
 try:
-    import lgpio
-    import smbus2
+    import gpiod
     GPIO_AVAILABLE = True
-except (ImportError, RuntimeError):
-    log.warning("RPi.GPIO / smbus2 not available – running in SIMULATION mode")
-    GPIO_AVAILABLE = False
+except (ImportError, RuntimeError) as err:
+    log.warning("gpiod not available – GPIO running in SIMULATION mode (%s)", err)
+
+try:
+    import smbus2
+    I2C_AVAILABLE = True
+except (ImportError, RuntimeError) as err:
+    log.warning("smbus2 not available – I2C running in SIMULATION mode (%s)", err)
 
 # ---------------------------------------------------------------------------
 # Shared state (written by the monitor thread, read by the HTTP thread)
@@ -99,17 +107,44 @@ current_state: dict = {
 # ---------------------------------------------------------------------------
 
 def gpio_setup():
-    """Initialise GPIO pins via lgpio."""
-    _hw["chip"] = lgpio.gpiochip_open(0)
-    lgpio.gpio_claim_input(_hw["chip"], GPIO_PLD)
-    lgpio.gpio_claim_output(_hw["chip"], GPIO_BUZZER, 0)
-    lgpio.gpio_claim_output(_hw["chip"], GPIO_BOOT, 0)
-    lgpio.gpio_claim_output(_hw["chip"], GPIO_SHUTDOWN, 0)
-    lgpio.gpio_write(_hw["chip"], GPIO_BOOT, 1)  # signal: system is up
-    lgpio.gpio_write(_hw["chip"], GPIO_BUZZER, 0)
-    lgpio.gpio_write(_hw["chip"], GPIO_SHUTDOWN, 0)
+    """Initialise GPIO pins via native gpiod on Raspberry Pi 4."""
+    try:
+        # gpio maps on Raspberry Pi 4:
+        chip = gpiod.Chip("/dev/gpiochip4")
 
-    log.info("GPIO configured. Shutdown pin: GPIO%d", GPIO_SHUTDOWN)
+        # 1. Configure INPUT: GPIO6 (PLD)
+        line_pld = chip.get_line(GPIO_PLD)
+        line_pld.request(consumer="x728-daemon", type=gpiod.LINE_REQ_DIR_IN)
+        gpio_lines[GPIO_PLD] = line_pld
+
+        # 2. Configure OUTPUT: GPIO20 (Buzzer), GPIO12 (BOOT), GPIO_SHUTDOWN (13 o 26)
+        for pin in [GPIO_BUZZER, GPIO_BOOT, GPIO_SHUTDOWN]:
+            line = chip.get_line(pin)
+            line.request(consumer="x728-daemon", type=gpiod.LINE_REQ_DIR_OUT)
+            gpio_lines[pin] = line
+
+        # 3. Initial state of Outputs
+        gpio_lines[GPIO_BOOT].set_value(1)      # signal: system is up
+        gpio_lines[GPIO_BUZZER].set_value(0)    # buzzer off
+        gpio_lines[GPIO_SHUTDOWN].set_value(0)  # shutdown pin low
+
+        log.info("GPIO configured via native gpiod. Shutdown pin: GPIO%d", GPIO_SHUTDOWN)
+    except Exception as e:
+        log.error("Failed to initialize GPIO hardware: %s", e)
+        raise
+
+
+def gpio_read(pin):
+    """Emulate lgpio.gpio_read"""
+    if pin in gpio_lines:
+        return gpio_lines[pin].get_value()
+    return 0
+
+
+def gpio_write(pin, value):
+    """Emulate lgpio.gpio_write"""
+    if pin in gpio_lines:
+        gpio_lines[pin].set_value(value)
 
 
 def read_voltage(bus) -> float:
@@ -137,9 +172,9 @@ def do_shutdown():
     # 2. Wait for OS to settle, then pulse the UPS shutdown pin
     time.sleep(SHUTDOWN_DELAY)
     if GPIO_AVAILABLE:
-        lgpio.gpio_write(_hw["chip"], GPIO_SHUTDOWN, 1)
+        gpio_write(GPIO_SHUTDOWN, 1)
         time.sleep(3)
-        lgpio.gpio_write(_hw["chip"], GPIO_SHUTDOWN, 0)
+        gpio_write(GPIO_SHUTDOWN, 0)
 
 
 def buzzer_beep(count: int = 1, on_ms: int = 100, off_ms: int = 100):
@@ -147,9 +182,9 @@ def buzzer_beep(count: int = 1, on_ms: int = 100, off_ms: int = 100):
     if not GPIO_AVAILABLE:
         return
     for _ in range(count):
-        lgpio.gpio_write(_hw["chip"], GPIO_BUZZER, 1)
+        gpio_write(GPIO_BUZZER, 1)
         time.sleep(on_ms / 1000)
-        lgpio.gpio_write(_hw["chip"], GPIO_BUZZER, 0)
+        gpio_write(GPIO_BUZZER, 0)
         time.sleep(off_ms / 1000)
 
 
@@ -161,7 +196,12 @@ def monitor_loop():
     """Background thread: poll hardware and update shared state."""
     bus = None
     if GPIO_AVAILABLE:
-        gpio_setup()
+        try:
+            gpio_setup()
+        except Exception as e:  # pylint: disable=broad-except
+            log.error("GPIO hardware setup failed. Running GPIO in simulation: %s", e)
+
+    if I2C_AVAILABLE:
         try:
             bus = smbus2.SMBus(I2C_BUS)
         except Exception as e:  # pylint: disable=broad-except
@@ -174,8 +214,8 @@ def monitor_loop():
             voltage = read_voltage(bus) if bus else None
             capacity = read_capacity(bus) if bus else None
             ac_present = (
-                not bool(lgpio.gpio_read(_hw["chip"], GPIO_PLD))
-                if GPIO_AVAILABLE
+                not bool(gpio_read(GPIO_PLD))
+                if GPIO_AVAILABLE and GPIO_PLD in gpio_lines
                 else None
             )
 
@@ -200,7 +240,8 @@ def monitor_loop():
                 })
 
             # --- AC loss buzzer ---
-            if GPIO_AVAILABLE and BUZZER_ON_AC_LOSS and ac_present is False:
+            if GPIO_AVAILABLE and GPIO_PLD in gpio_lines \
+                    and BUZZER_ON_AC_LOSS and ac_present is False:
                 buzzer_beep(count=1, on_ms=100, off_ms=100)
 
             # --- Shutdown logic ---
@@ -263,7 +304,7 @@ if __name__ == "__main__":
         "Shutdown thresholds: voltage<%.2fV OR capacity<%d%% (delay %ds)",
         SHUTDOWN_VOLTAGE, SHUTDOWN_CAPACITY, SHUTDOWN_DELAY,
     )
-    log.info("Script script executed by: %s (UID: %d)", getpass.getuser(), os.getuid())
+    log.info("Script executed by: %s (UID: %d)", getpass.getuser(), os.getuid())
 
     monitor = threading.Thread(target=monitor_loop, daemon=True, name="x728-monitor")
     monitor.start()
@@ -274,5 +315,5 @@ if __name__ == "__main__":
         server.serve_forever()
     except KeyboardInterrupt:
         log.info("Daemon stopped.")
-        if GPIO_AVAILABLE and _hw["chip"] is not None:
-            lgpio.gpiochip_close(_hw["chip"])
+        if GPIO_AVAILABLE:
+            gpio_lines.clear()
