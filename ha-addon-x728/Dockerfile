@@ -9,7 +9,7 @@ RUN apk add --no-cache \
     i2c-tools \
     libgpiod
 # Install Python packages
-RUN pip3 install --no-cache-dir smbus2 rpi-lgpio-periphery
+RUN pip3 install --no-cache-dir smbus2 python-periphery rpi-lgpio
 
 # Create symlink for lgpio to maintain compatibility with older versions of rpi_lgpio
 RUN python3 -c "import os, site; d=site.getsitepackages()[0]; os.symlink(os.path.join(d, 'rpi_lgpio'), os.path.join(d, 'lgpio'))"
