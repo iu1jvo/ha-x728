@@ -21,6 +21,7 @@ Hardware GPIO map:
 import json
 import logging
 import os
+import getpass
 import struct
 import subprocess
 import time
@@ -255,12 +256,14 @@ class X728Handler(BaseHTTPRequestHandler):
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 if __name__ == "__main__":
     log.info("Starting X728 daemon | hw=%s | port=%d | poll=%ds", HW_LABEL, PORT, POLL_INTERVAL)
     log.info(
         "Shutdown thresholds: voltage<%.2fV OR capacity<%d%% (delay %ds)",
         SHUTDOWN_VOLTAGE, SHUTDOWN_CAPACITY, SHUTDOWN_DELAY,
     )
+    log.info("Script script executed by: %s (UID: %d)", getpass.getuser(), os.getuid())
 
     monitor = threading.Thread(target=monitor_loop, daemon=True, name="x728-monitor")
     monitor.start()
