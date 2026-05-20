@@ -10,8 +10,7 @@ arch:
 privileged:
   - SYS_RAWIO
 devices:
-  - /dev/i2c-1
-  - /dev/gpiomem
+  - /dev/i2c-1:/dev/i2c-1
   - /dev/gpiochip0:/dev/gpiochip0
   - /dev/gpiochip1:/dev/gpiochip1
   - /dev/gpiochip2:/dev/gpiochip2
