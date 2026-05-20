@@ -14,7 +14,7 @@ RUN apk add --no-cache \
     i2c-tools \
     libgpiod \
     libgpiod-dev \
-    && pip3 install --no-cache-dir smbus2 lgpio
+    && pip3 install --no-cache-dir smbus2
 
 WORKDIR /app
 COPY x728_daemon.py .
