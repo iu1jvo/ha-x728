@@ -2,7 +2,7 @@ ARG BUILD_FROM=ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.22
 FROM $BUILD_FROM
 
 # Install library packages
-UN apk add --no-cache \
+RUN apk add --no-cache \
     python3 \
     py3-pip \
     py3-smbus \
