@@ -1,6 +1,6 @@
 name: "Geekworm X728 UPS Daemon"
 description: "Reads battery voltage, capacity and AC status from the Geekworm X728 UPS HAT and exposes them via a local REST API for the X728 integration."
-version: "0.9.5-rc"
+version: "0.9.6-rc"
 slug: "x728-daemon"
 init: false
 arch:
