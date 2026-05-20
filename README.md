@@ -1,5 +1,13 @@
 # ha-x728 — Geekworm X728 UPS for Home Assistant OS
 
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/iu1jvo6)
+[![PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/giulianofavro)
+[![GitHub release](https://img.shields.io/github/v/release/iu1jvo/x728?style=flat-square)](https://github.com/iu1jvo/x728/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/iu1jvo/x728/total?style=flat-square)](https://github.com/iu1jvo/x728/releases)
+[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg?style=flat-square)](https://github.com/hacs/integration)
+[![Comunity Forum](https://img.shields.io/badge/Community-Forum-success?style=flat-square)](https://community.home-assistant.io/t/meteobridge-weather-logger-integration/154263)
+
+
 ## Index
 
 1. [Introduction](#introduction)
@@ -72,14 +80,14 @@ Consists of two parts that work together:
 ### 1 — Add-on
 
 1. In HA go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
-2. Add: `https://github.com/<your-user>/ha-x728`
+2. Add: `https://github.com/iu1jvo/ha-x728`
 3. Install **Geekworm X728 UPS Daemon** and start it
 4. Configure options (especially `hw_version`)
 
 ### 2 — Custom Integration (HACS)
 
 1. In HACS go to **Integrations → ⋮ → Custom repositories**
-2. Add: `https://github.com/<your-user>/ha-x728` — category **Integration**
+2. Add: `https://github.com/iu1jvo/ha-x728` — category **Integration**
 3. Install **Geekworm X728 UPS**
 4. Go to **Settings → Integrations → Add Integration → X728**
 5. Host: `localhost`, Port: `8099` (or whatever you configured)
@@ -118,7 +126,7 @@ If logs are needed for debugging or reporting an issue, use the following config
 logger:
   default: error
   logs:
-    custom_components.meteobridge: debug
+    custom_components.x728: debug
 ```
 
 ## Contribute To The Project
@@ -129,7 +137,7 @@ logger:
 2. Open in VSCode and choose to open in devcontainer. Must have VSCode devcontainer prerequisites.
 3. Run the command container start from VSCode terminal
 4. A fresh Home Assistant test instance will install and will eventually be running on port 9125 with this integration running
-5. When the container is running, go to http://localhost:9125 and the add Meteobridge from the Integration Page.
+5. When the container is running, go to http://localhost:9125 and the add x728 from the Integration Page.
 
 ### Add-On
 1. Fork and clone the repository.

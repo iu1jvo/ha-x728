@@ -12,13 +12,28 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/ha-addon-x728
 
 jobs:
-  build-and-push:
-    name: Build ${{ matrix.arch }}
+
+  resolve-tag:
     runs-on: ubuntu-latest
     # Skip if the upstream bump-version workflow failed
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: Resolve tag name
+        id: tag
+        run: |
+          TAG="${{ github.event.workflow_run.head_branch || github.ref_name }}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+
+  build-and-push:
+    needs: resolve-tag
+    name: Build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -32,19 +47,10 @@ jobs:
             base_image: ghcr.io/home-assistant/base-python:3.12-alpine3.22
 
     steps:
-      - name: Resolve tag name
-        id: tag
-        run: |
-          # workflow_run doesn't expose GITHUB_REF_NAME for the triggering event,
-          # so we read the tag from the upstream workflow's head_branch field.
-          TAG="${{ github.event.workflow_run.head_branch || github.ref_name }}"
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
-
       - name: Checkout repository at tag
         uses: actions/checkout@v5
         with:
-          ref: ${{ steps.tag.outputs.tag }}
+          ref: ${{ needs.resolve-tag.outputs.tag }}
 
       - name: Set up QEMU (for cross-compilation)
         uses: docker/setup-qemu-action@v3
@@ -69,33 +75,26 @@ jobs:
           build-args: |
             BUILD_FROM=${{ matrix.base_image }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ steps.tag.outputs.version }}-${{ matrix.arch }}
+            ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ needs.resolve-tag.outputs.version }}-${{ matrix.arch }}
             ghcr.io/${{ github.repository_owner }}/ha-addon-x728:latest-${{ matrix.arch }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           labels: |
             org.opencontainers.image.title=Geekworm X728 UPS Daemon (${{ matrix.arch }})
             org.opencontainers.image.description=HA add-on daemon for the Geekworm X728 UPS HAT
-            org.opencontainers.image.version=${{ steps.tag.outputs.version }}
+            org.opencontainers.image.version=${{ needs.resolve-tag.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
   create-manifest:
     name: Create multi-arch manifest
     runs-on: ubuntu-latest
-    needs: build-and-push
+    needs: [build-and-push, resolve-tag]
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Resolve tag name
-        id: tag
-        run: |
-          TAG="${{ github.event.workflow_run.head_branch || github.ref_name }}"
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
-
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -105,8 +104,8 @@ jobs:
 
       - name: Create and push version manifest
         run: |
-          docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ steps.tag.outputs.version }} \
-            ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ steps.tag.outputs.version }}-aarch64
+          docker buildx imagetools create -t ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ needs.resolve-tag.outputs.version }} \
+            ghcr.io/${{ github.repository_owner }}/ha-addon-x728:${{ needs.resolve-tag.outputs.version }}-aarch64
 
       - name: Create and push latest manifest
         run: |
@@ -116,21 +115,15 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: create-manifest
+    needs: [create-manifest, resolve-tag]
     permissions:
       contents: write
 
     steps:
-      - name: Resolve tag name
-        id: tag
-        run: |
-          TAG="${{ github.event.workflow_run.head_branch || github.ref_name }}"
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          ref: ${{ steps.tag.outputs.tag }}
+          ref: ${{ needs.resolve-tag.outputs.tag }}
           fetch-depth: 0
 
       - name: Generate changelog from commits
@@ -149,8 +142,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: "Release ${{ steps.tag.outputs.tag }}"
+          tag_name: ${{ needs.resolve-tag.outputs.tag }}
+          name: "Release ${{ needs.resolve-tag.outputs.tag }}"
           body: |
             ## What's changed
             ${{ steps.changelog.outputs.log }}
@@ -158,7 +151,7 @@ jobs:
             ## Docker images
             | Architecture | Image |
             |---|---|
-            | aarch64 | `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}-aarch64` |
-            | **multi-arch** | `ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}` |
+            | aarch64 | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.resolve-tag.outputs.tag }}-aarch64` |
+            | **multi-arch** | `ghcr.io/${{ env.IMAGE_NAME }}:${{ needs.resolve-tag.outputs.tag }}` |
           draft: false
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          prerelease: ${{ contains(needs.resolve-tag.outputs.tag, 'alpha') || contains(needs.resolve-tag.outputs.tag, 'beta') || contains(needs.resolve-tag.outputs.tag, 'rc') }}
