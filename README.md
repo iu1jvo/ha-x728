@@ -2,8 +2,8 @@
 
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/iu1jvo6)
 [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/giulianofavro)
-[![GitHub release](https://img.shields.io/github/v/release/iu1jvo/x728?style=flat-square)](https://github.com/iu1jvo/x728/releases/latest)
-[![GitHub downloads](https://img.shields.io/github/downloads/iu1jvo/x728/total?style=flat-square)](https://github.com/iu1jvo/x728/releases)
+[![GitHub release](https://img.shields.io/github/v/release/iu1jvo/ha-x728?style=flat-square)](https://github.com/iu1jvo/ha-x728/releases/latest)
+[![GitHub downloads](https://img.shields.io/github/downloads/iu1jvo/ha-x728/total?style=flat-square)](https://github.com/iu1jvo/ha-x728/releases)
 [![HACS](https://img.shields.io/badge/HACS-Default-orange.svg?style=flat-square)](https://github.com/hacs/integration)
 [![Comunity Forum](https://img.shields.io/badge/Community-Forum-success?style=flat-square)](https://community.home-assistant.io/t/meteobridge-weather-logger-integration/154263)
 
