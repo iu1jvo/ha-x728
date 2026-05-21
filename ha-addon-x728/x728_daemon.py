@@ -41,7 +41,10 @@ SHUTDOWN_CAPACITY = int(os.environ.get("SHUTDOWN_CAPACITY", "5"))       # %
 SHUTDOWN_DELAY = int(os.environ.get("SHUTDOWN_DELAY", "10"))         # seconds
 
 BUZZER_ON_AC_LOSS = os.environ.get("BUZZER_ON_AC_LOSS", "true").lower() == "true"
-GPIO_CHIP = os.environ.get("GPIO_CHIP", "/dev/gpiochip4")
+# "autodetect" or specific path like "/dev/gpiochip0"
+GPIO_CHIP = os.environ.get("GPIO_CHIP", "autodetect")
+
+CHIP_FALLBACK = "/dev/gpiochip0"  # used if autodetect fails
 
 # GPIO pin selection based on hardware version
 if HW_VERSION.startswith("v1") or HW_VERSION == "v2.0":
@@ -68,19 +71,19 @@ log = logging.getLogger("x728")
 # ---------------------------------------------------------------------------
 # Global Hardware State & Graceful Imports
 # ---------------------------------------------------------------------------
-gpio_lines = {}
-GPIO_AVAILABLE = False
-I2C_AVAILABLE = False
+gpio_lines = {}  # unused with gpiod v2
+GPIO_AVAILABLE = False  # pylint: disable=invalid-name
+I2C_AVAILABLE = False  # pylint: disable=invalid-name
 
 try:
     import gpiod
-    GPIO_AVAILABLE = True
+    GPIO_AVAILABLE = True  # pylint: disable=invalid-name
 except (ImportError, RuntimeError) as err:
     log.warning("gpiod not available – GPIO running in SIMULATION mode (%s)", err)
 
 try:
     import smbus2
-    I2C_AVAILABLE = True
+    I2C_AVAILABLE = True  # pylint: disable=invalid-name
 except (ImportError, RuntimeError) as err:
     log.warning("smbus2 not available – I2C running in SIMULATION mode (%s)", err)
 
@@ -103,71 +106,91 @@ current_state: dict = {
 # ---------------------------------------------------------------------------
 # Hardware helpers
 # ---------------------------------------------------------------------------
+# Known GPIO controller names per platform
+_KNOWN_CONTROLLERS = [
+    "pinctrl-rp1",      # Raspberry Pi 5
+    "pinctrl-bcm2711",  # Raspberry Pi 4
+    "pinctrl-bcm2835",  # Raspberry Pi 3 / Zero
+]
+
+# gpiod v2 request handle (set in gpio_setup, used in gpio_read/write)
+_gpio_request = None  # pylint: disable=invalid-name
+
+
 def find_gpio_chip() -> str:
-    """Auto-detect the correct gpiochip by controller name."""
-    known_controllers = [
-        "pinctrl-rp1",      # RPi5
-        "pinctrl-bcm2711",  # RPi4
-        "pinctrl-bcm2835",  # RPi3 / RPi Zero
-    ]
-    try:
-        chips = gpiod.ChipIter()
-        for chip in chips:
-            info = chip.name()
-            for controller in known_controllers:
-                if controller in chip.label():
-                    log.info("Auto-detected GPIO chip: %s (%s)", info, chip.label())
-                    return f"/dev/{info}"
-    except Exception as e:  # pylint: disable=broad-except
-        log.warning("GPIO chip auto-detection failed: %s", e)
-    # fallback on chip 0 (common default for single-chip systems)
-    return "/dev/gpiochip0"
+    """Auto-detect the correct gpiochip by controller name (gpiod v2 API).
+
+    Scans /dev/gpiochip* and matches against known RPi controller labels.
+    Falls back to GPIO_CHIP env var if detection fails.
+    """
+    for i in range(5):
+        path = f"/dev/gpiochip{i}"
+        if not os.path.exists(path):
+            continue
+        try:
+            with gpiod.Chip(path) as chip:
+                label = chip.get_info().label
+                for controller in _KNOWN_CONTROLLERS:
+                    if controller in label:
+                        log.info("Auto-detected GPIO chip: %s (label: %s)", path, label)
+                        return path
+        except Exception:  # pylint: disable=broad-except
+            continue
+    log.warning("GPIO chip auto-detection failed, using fallback: %s", CHIP_FALLBACK)
+    return CHIP_FALLBACK
 
 
 def gpio_setup():
-    """Initialise GPIO pins via native gpiod on Raspberry Pi."""
-    try:
-        # gpio maps are not fixed across all Pi models, so we use the label-based chip access:
-        if GPIO_CHIP == "autodetect":
-            chip_path = find_gpio_chip()
-        else:
-            chip_path = GPIO_CHIP
+    """Initialise GPIO pins via gpiod v2 API."""
+    global _gpio_request  # pylint: disable=global-statement
 
-        chip = gpiod.Chip(chip_path)
+    chip_path = find_gpio_chip() if GPIO_CHIP == "autodetect" else GPIO_CHIP
 
-        # 1. Configure INPUT: GPIO6 (PLD)
-        line_pld = chip.get_line(GPIO_PLD)
-        line_pld.request(consumer="x728-daemon", type=gpiod.LINE_REQ_DIR_IN)
-        gpio_lines[GPIO_PLD] = line_pld
+    # Build line configuration: INPUT for PLD, OUTPUT for the rest
+    line_config = {
+        GPIO_PLD: gpiod.LineSettings(
+            direction=gpiod.line.Direction.INPUT
+        ),
+        GPIO_BUZZER: gpiod.LineSettings(
+            direction=gpiod.line.Direction.OUTPUT,
+            output_value=gpiod.line.Value.INACTIVE,
+        ),
+        GPIO_BOOT: gpiod.LineSettings(
+            direction=gpiod.line.Direction.OUTPUT,
+            output_value=gpiod.line.Value.ACTIVE,    # HIGH = system is up
+        ),
+        GPIO_SHUTDOWN: gpiod.LineSettings(
+            direction=gpiod.line.Direction.OUTPUT,
+            output_value=gpiod.line.Value.INACTIVE,
+        ),
+    }
 
-        # 2. Configure OUTPUT: GPIO20 (Buzzer), GPIO12 (BOOT), GPIO_SHUTDOWN (13 o 26)
-        for pin in [GPIO_BUZZER, GPIO_BOOT, GPIO_SHUTDOWN]:
-            out_line = chip.get_line(pin)
-            out_line.request(consumer="x728-daemon", type=gpiod.LINE_REQ_DIR_OUT)
-            gpio_lines[pin] = out_line
+    _gpio_request = gpiod.request_lines(
+        chip_path,
+        consumer="x728-daemon",
+        config=line_config,
+    )
 
-        # 3. Initial state of Outputs
-        gpio_lines[GPIO_BOOT].set_value(1)      # signal: system is up
-        gpio_lines[GPIO_BUZZER].set_value(0)    # buzzer off
-        gpio_lines[GPIO_SHUTDOWN].set_value(0)  # shutdown pin low
-
-        log.info("GPIO configured via native gpiod. Shutdown pin: GPIO%d", GPIO_SHUTDOWN)
-    except Exception as e:
-        log.error("Failed to initialize GPIO hardware: %s", e)
-        raise
-
-
-def gpio_read(pin):
-    """Emulate lgpio.gpio_read"""
-    if pin in gpio_lines:
-        return gpio_lines[pin].get_value()
-    return 0
+    log.info(
+        "GPIO configured via gpiod v2 (%s). Shutdown pin: GPIO%d",
+        chip_path, GPIO_SHUTDOWN,
+    )
 
 
-def gpio_write(pin, value):
-    """Emulate lgpio.gpio_write"""
-    if pin in gpio_lines:
-        gpio_lines[pin].set_value(value)
+def gpio_read(pin: int) -> int:
+    """Read the current value of a GPIO pin (1=high, 0=low)."""
+    if _gpio_request is None:
+        return 0
+    val = _gpio_request.get_value(pin)
+    return 1 if val == gpiod.line.Value.ACTIVE else 0
+
+
+def gpio_write(pin: int, value: int) -> None:
+    """Write a value to a GPIO pin (1=high, 0=low)."""
+    if _gpio_request is None:
+        return
+    gpio_val = gpiod.line.Value.ACTIVE if value else gpiod.line.Value.INACTIVE
+    _gpio_request.set_value(pin, gpio_val)
 
 
 def read_voltage(bus) -> float:
@@ -194,7 +217,8 @@ def do_shutdown():
         log.error("Failed to call 'ha os shutdown': %s", e)
     # 2. Wait for OS to settle, then pulse the UPS shutdown pin
     time.sleep(SHUTDOWN_DELAY)
-    if GPIO_AVAILABLE:
+    # ac_present
+    if GPIO_AVAILABLE and _gpio_request is not None:
         gpio_write(GPIO_SHUTDOWN, 1)
         time.sleep(3)
         gpio_write(GPIO_SHUTDOWN, 0)
@@ -238,7 +262,7 @@ def monitor_loop():
             capacity = read_capacity(bus) if bus else None
             ac_present = (
                 not bool(gpio_read(GPIO_PLD))
-                if GPIO_AVAILABLE and GPIO_PLD in gpio_lines
+                if GPIO_AVAILABLE and _gpio_request is not None
                 else None
             )
 
@@ -263,7 +287,7 @@ def monitor_loop():
                 })
 
             # --- AC loss buzzer ---
-            if GPIO_AVAILABLE and GPIO_PLD in gpio_lines \
+            if GPIO_AVAILABLE and _gpio_request is not None \
                     and BUZZER_ON_AC_LOSS and ac_present is False:
                 buzzer_beep(count=1, on_ms=100, off_ms=100)
 
@@ -338,7 +362,5 @@ if __name__ == "__main__":
         server.serve_forever()
     except KeyboardInterrupt:
         log.info("Daemon stopped.")
-        if GPIO_AVAILABLE:
-            for line in gpio_lines.values():
-                line.release()
-            gpio_lines.clear()
+        if GPIO_AVAILABLE and _gpio_request is not None:
+            _gpio_request.release()

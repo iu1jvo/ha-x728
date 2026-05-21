@@ -11,18 +11,19 @@
 ## Index
 
 1. [Introduction](#introduction)
-2. [Entities created](#entities-created)
-3. [Hardware GPIO reference](#hardware-gpio-reference)
-4. [Add-on configuration options](#add-on-configuration-options)
-5. [Installation](#installation)
+2. [Prerequisites](#prerequisites)
+3. [Entities created](#entities-created)
+4. [Hardware GPIO reference](#hardware-gpio-reference)
+5. [Add-on configuration options](#add-on-configuration-options)
+6. [Installation](#installation)
     1. [Add-on](#1--add-on)
     2. [Custom Integration (HACS)](#2--custom-integration-hacs)
-6. [REST API](#rest-api)
-7. [Enable Debug Logging](#enable-debug-logging)
-8. [Contribute To The Project](#contribute-to-the-project)
+7. [REST API](#rest-api)
+8. [Enable Debug Logging](#enable-debug-logging)
+9. [Contribute To The Project](#contribute-to-the-project)
     1. [Integration](#integration)
     2. [Add-On](#add-on)
-9. [Credits](#credits)
+10. [Credits](#credits)
 
 ## Introduction
 Full integration between the [Geekworm X728 UPS HAT](https://wiki.geekworm.com/X728) and **Home Assistant OS** (HAOS).
@@ -34,7 +35,10 @@ Consists of two parts that work together:
 | **HA Add-on** (`ha-addon-x728/`) | Runs a Python daemon inside a Docker container with access to I2C and GPIO. Reads the hardware and exposes a local REST API. Handles safe shutdown. |
 | **Custom Integration** (`custom_components/x728/`) | Pure HA integration that polls the daemon REST API and creates entities. Installable via HACS. |
 
----
+## Prerequisites
+
+In order to use the HA X728 Add on, is required the acces to the I2C bus but the I2C bus is not enabled as default.
+To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assistant.io/common-tasks/os#enable-i2c).
 
 ## Entities created
 
@@ -46,7 +50,6 @@ Consists of two parts that work together:
 | `binary_sensor.x728_ac_power` | Binary sensor | ON = AC power present |
 | `binary_sensor.x728_battery_low` | Binary sensor | ON = below shutdown threshold |
 | `binary_sensor.x728_charging` | Binary sensor | ON = currently charging |
-
 ---
 
 ## Hardware GPIO reference
@@ -58,7 +61,6 @@ Consists of two parts that work together:
 | 13 | OUT | Shutdown trigger (**v1.x / v2.0** only) |
 | 20 | OUT | Buzzer |
 | 26 | OUT | Shutdown trigger (**v2.1 / v2.2 / v2.3**) |
-
 ---
 
 ## Add-on configuration options
@@ -72,7 +74,6 @@ Consists of two parts that work together:
 | `shutdown_capacity` | `5` | Shutdown if battery capacity < this value (%). Set `0` to disable. |
 | `shutdown_delay` | `10` | Seconds between HA shutdown command and UPS power-off |
 | `buzzer_on_ac_loss` | `true` | Beep the buzzer when AC power is lost |
-
 ---
 
 ## Installation
@@ -91,7 +92,6 @@ Consists of two parts that work together:
 3. Install **Geekworm X728 UPS**
 4. Go to **Settings → Integrations → Add Integration → X728**
 5. Host: `localhost`, Port: `8099` (or whatever you configured)
-
 ---
 
 ## REST API
@@ -115,8 +115,6 @@ Response example:
   "error": null
 }
 ```
-
----
 
 ## Enable Debug Logging
 
