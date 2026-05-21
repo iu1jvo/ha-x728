@@ -21,11 +21,11 @@ Hardware GPIO map:
 import json
 import logging
 import os
-import getpass
 import struct
 import subprocess
 import time
 import threading
+import pwd
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ---------------------------------------------------------------------------
@@ -41,9 +41,7 @@ SHUTDOWN_CAPACITY = int(os.environ.get("SHUTDOWN_CAPACITY", "5"))       # %
 SHUTDOWN_DELAY = int(os.environ.get("SHUTDOWN_DELAY", "10"))         # seconds
 
 BUZZER_ON_AC_LOSS = os.environ.get("BUZZER_ON_AC_LOSS", "true").lower() == "true"
-
-# Lgpio chip handle (initialized in gpio_setup)
-_hw = {"chip": None}
+GPIO_CHIP = os.environ.get("GPIO_CHIP", "/dev/gpiochip4")
 
 # GPIO pin selection based on hardware version
 if HW_VERSION.startswith("v1") or HW_VERSION == "v2.0":
@@ -105,12 +103,37 @@ current_state: dict = {
 # ---------------------------------------------------------------------------
 # Hardware helpers
 # ---------------------------------------------------------------------------
+def find_gpio_chip() -> str:
+    """Auto-detect the correct gpiochip by controller name."""
+    known_controllers = [
+        "pinctrl-rp1",      # RPi5
+        "pinctrl-bcm2711",  # RPi4
+        "pinctrl-bcm2835",  # RPi3 / RPi Zero
+    ]
+    try:
+        chips = gpiod.ChipIter()
+        for chip in chips:
+            info = chip.name()
+            for controller in known_controllers:
+                if controller in chip.label():
+                    log.info("Auto-detected GPIO chip: %s (%s)", info, chip.label())
+                    return f"/dev/{info}"
+    except Exception as e:  # pylint: disable=broad-except
+        log.warning("GPIO chip auto-detection failed: %s", e)
+    # fallback on chip 0 (common default for single-chip systems)
+    return "/dev/gpiochip0"
+
 
 def gpio_setup():
-    """Initialise GPIO pins via native gpiod on Raspberry Pi 4."""
+    """Initialise GPIO pins via native gpiod on Raspberry Pi."""
     try:
-        # gpio maps on Raspberry Pi 4:
-        chip = gpiod.Chip("/dev/gpiochip4")
+        # gpio maps are not fixed across all Pi models, so we use the label-based chip access:
+        if GPIO_CHIP == "autodetect":
+            chip_path = find_gpio_chip()
+        else:
+            chip_path = GPIO_CHIP
+
+        chip = gpiod.Chip(chip_path)
 
         # 1. Configure INPUT: GPIO6 (PLD)
         line_pld = chip.get_line(GPIO_PLD)
@@ -119,9 +142,9 @@ def gpio_setup():
 
         # 2. Configure OUTPUT: GPIO20 (Buzzer), GPIO12 (BOOT), GPIO_SHUTDOWN (13 o 26)
         for pin in [GPIO_BUZZER, GPIO_BOOT, GPIO_SHUTDOWN]:
-            line = chip.get_line(pin)
-            line.request(consumer="x728-daemon", type=gpiod.LINE_REQ_DIR_OUT)
-            gpio_lines[pin] = line
+            out_line = chip.get_line(pin)
+            out_line.request(consumer="x728-daemon", type=gpiod.LINE_REQ_DIR_OUT)
+            gpio_lines[pin] = out_line
 
         # 3. Initial state of Outputs
         gpio_lines[GPIO_BOOT].set_value(1)      # signal: system is up
@@ -304,7 +327,7 @@ if __name__ == "__main__":
         "Shutdown thresholds: voltage<%.2fV OR capacity<%d%% (delay %ds)",
         SHUTDOWN_VOLTAGE, SHUTDOWN_CAPACITY, SHUTDOWN_DELAY,
     )
-    log.info("Script executed by: %s (UID: %d)", getpass.getuser(), os.getuid())
+    log.info("Script executed by: %s (UID: %d)", pwd.getpwuid(os.getuid()).pw_name, os.getuid())
 
     monitor = threading.Thread(target=monitor_loop, daemon=True, name="x728-monitor")
     monitor.start()
@@ -316,4 +339,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         log.info("Daemon stopped.")
         if GPIO_AVAILABLE:
+            for line in gpio_lines.values():
+                line.release()
             gpio_lines.clear()

@@ -9,14 +9,13 @@ arch:
 # Hardware access
 privileged:
   - SYS_RAWIO
-  - DAC_OVERRIDE
 devices:
-  - /dev/i2c-1:/dev/i2c-1
-  - /dev/gpiochip0:/dev/gpiochip0
-  - /dev/gpiochip1:/dev/gpiochip1
-  - /dev/gpiochip2:/dev/gpiochip2
-  - /dev/gpiochip3:/dev/gpiochip3
-  - /dev/gpiochip4:/dev/gpiochip4
+  - /dev/i2c-1
+  - /dev/gpiochip0
+  - /dev/gpiochip1
+  - /dev/gpiochip2
+  - /dev/gpiochip3
+  - /dev/gpiochip4
 
 # The integration connects here
 ports:
@@ -33,6 +32,7 @@ options:
   shutdown_capacity: 5
   shutdown_delay: 10
   buzzer_on_ac_loss: true
+  gpio_chip: "autodetect"
 
 schema:
   hw_version: list(v1.x/v2.0|v2.1|v2.2|v2.3)
@@ -42,5 +42,6 @@ schema:
   shutdown_capacity: int(0,50)
   shutdown_delay: int(5,120)
   buzzer_on_ac_loss: bool
+  gpio_chip: "list(autodetect|/dev/gpiochip0|/dev/gpiochip1|/dev/gpiochip2|/dev/gpiochip3|/dev/gpiochip4)"
 
 image: "ghcr.io/iu1jvo/ha-addon-x728"
