@@ -26,10 +26,6 @@ for label_file in /sys/class/gpio/gpiochip*/label; do
     bashio::log.info "  ${chip} -> ${label}"
 done
 
-bashio::log.info "Kernel GPIO debug:"
-cat /sys/kernel/debug/gpio 2>/dev/null | while IFS= read -r line; do
-    bashio::log.info "  ${line}"
-done
 bashio::log.info "--- end GPIO info ---"
 
 
