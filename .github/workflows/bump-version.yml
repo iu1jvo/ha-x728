@@ -1,5 +1,11 @@
 name: Bump Version Files
 
+# Runs BEFORE the build workflow.
+# When you push a tag vX.Y.Z this workflow:
+#   1. Updates version in custom_components/meteobridge/manifest.json
+#   2. Commits the changes back to the branch that was tagged
+#   3. Moves the tag to point at the new commit
+
 on:
   push:
     tags:
@@ -78,7 +84,7 @@ jobs:
 
           with open(path, "w") as f:
               json.dump(manifest, f, indent=2)
-              f.write("\n")
+              f.write("\n")   # trailing newline
 
           print(f"manifest.json: {old} → {version}")
           EOF
@@ -92,6 +98,7 @@ jobs:
 
           git add ha-addon-x728/config.yaml custom_components/x728/manifest.json
 
+          # Only commit if there is actually a change
           if git diff --cached --quiet; then
             echo "No version change – skipping commit."
           else
@@ -103,5 +110,7 @@ jobs:
         env:
           PAT_TOKEN: ${{ secrets.PAT_PUSH }}
         run: |
+          # Re-point the tag at the version-bump commit so the build
+          # workflow picks up the updated files.
           git tag -f ${{ github.ref_name }}
           git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git ${{ github.ref_name }} --force
