@@ -14,15 +14,15 @@
 2. [Prerequisites](#prerequisites)
 3. [Entities created](#entities-created)
 4. [Hardware GPIO reference](#hardware-gpio-reference)
-5. [Add-on configuration options](#add-on-configuration-options)
+5. [App configuration options](#app-configuration-options)
 6. [Installation](#installation)
-    1. [Add-on](#1--add-on)
+    1. [App](#1--App)
     2. [Custom Integration (HACS)](#2--custom-integration-hacs)
 7. [REST API](#rest-api)
 8. [Enable Debug Logging](#enable-debug-logging)
 9. [Contribute To The Project](#contribute-to-the-project)
     1. [Integration](#integration)
-    2. [Add-On](#add-on)
+    2. [App](#app)
 10. [Credits](#credits)
 
 ## Introduction
@@ -32,12 +32,12 @@ Consists of two parts that work together:
 
 | Part | What it does |
 |---|---|
-| **HA Add-on** (`ha-addon-x728/`) | Runs a Python daemon inside a Docker container with access to I2C and GPIO. Reads the hardware and exposes a local REST API. Handles safe shutdown. |
+| **HA App** (`ha-addon-x728/`) | Runs a Python daemon inside a Docker container with access to I2C and GPIO. Reads the hardware and exposes a local REST API. Handles safe shutdown. |
 | **Custom Integration** (`custom_components/x728/`) | Pure HA integration that polls the daemon REST API and creates entities. Installable via HACS. |
 
 ## Prerequisites
 
-In order to use the HA X728 Add on, is required the acces to the I2C bus but the I2C bus is not enabled as default.
+In order to use the HA X728 App, is required the acces to the I2C bus but the I2C bus is not enabled as default.
 To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assistant.io/common-tasks/os#enable-i2c).
 
 ## Entities created
@@ -63,7 +63,7 @@ To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assist
 | 26 | OUT | Shutdown trigger (**v2.1 / v2.2 / v2.3**) |
 ---
 
-## Add-on configuration options
+## App configuration options
 
 | Option | Default | Description |
 |---|---|---|
@@ -78,9 +78,9 @@ To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assist
 
 ## Installation
 
-### 1 — Add-on
+### 1 — App
 
-1. In HA go to **Settings → Add-ons → Add-on Store → ⋮ → Repositories**
+1. In HA go to **Settings → Apps → Install App → ⋮ → Repositories**
 2. Add: `https://github.com/iu1jvo/ha-x728`
 3. Install **Geekworm X728 UPS Daemon** and start it
 4. Configure options (especially `hw_version`)
@@ -137,11 +137,11 @@ logger:
 4. A fresh Home Assistant test instance will install and will eventually be running on port 9125 with this integration running
 5. When the container is running, go to http://localhost:9125 and the add x728 from the Integration Page.
 
-### Add-On
+### App
 1. Fork and clone the repository.
-2. Open in VSCode. To test the add-on, there are two way:
+2. Open in VSCode. To test the app, there are two way:
     1. Chose to open in a dev container, the integation will start and run in simulation mode.
-    2. run the add-on script in a terminal:
+    2. run the app script in a terminal:
         ```bash
         cd ha-addon-x728
         SHUTDOWN_VOLTAGE=3.5 SHUTDOWN_CAPACITY=10 DAEMON_PORT=8099 python3 x728_daemon.py
