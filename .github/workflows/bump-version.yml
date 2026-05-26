@@ -3,8 +3,8 @@ name: Bump Version Files
 # Runs BEFORE the build workflow.
 # When you push a tag vX.Y.Z this workflow:
 #   1. Updates version in custom_components/meteobridge/manifest.json
-#   2. Commits the changes back to the branch that was tagged
-#   3. Moves the tag to point at the new commit
+#   2. Creates a pull request with the changes
+#   3. Auto-merges the PR to main
 
 on:
   push:
@@ -17,6 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout repository (full history)
@@ -40,24 +41,22 @@ jobs:
       - name: Bump ha-addon-x728/config.yaml
         run: |
           python3 - <<'EOF'
-          import yaml, sys
+          import yaml, sys, re
 
           path = "ha-addon-x728/config.yaml"
           version = "${{ steps.ver.outputs.version }}"
 
           with open(path) as f:
-              cfg = yaml.safe_load(f)
-
-          old = cfg.get("version", "?")
-          cfg["version"] = version
-
-          with open(path) as f:
               content = f.read()
 
-          import re
+          old_version = None
+          match = re.search(r'^version:\s*"([^"]+)"', content, re.MULTILINE)
+          if match:
+              old_version = match.group(1)
+
           new_content = re.sub(
-              r'^(version:\s*).*$',
-              f'\\g<1>"{version}"',
+              r'^(version:\s*)"[^"]*"',
+              f'\\1"{version}"',
               content,
               flags=re.MULTILINE,
           )
@@ -65,7 +64,7 @@ jobs:
           with open(path, "w") as f:
               f.write(new_content)
 
-          print(f"config.yaml: {old} → {version}")
+          print(f"config.yaml: {old_version or '?'} → {version}")
           EOF
 
       - name: Bump custom_components/x728/manifest.json
@@ -84,33 +83,30 @@ jobs:
 
           with open(path, "w") as f:
               json.dump(manifest, f, indent=2)
-              f.write("\n")   # trailing newline
+              f.write("\n")
 
           print(f"manifest.json: {old} → {version}")
           EOF
 
-      - name: Commit bumped files
-        env:
-          PAT_TOKEN: ${{ secrets.PAT_PUSH }}
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: bump version to ${{ github.ref_name }}"
+          title: "chore: bump version to ${{ github.ref_name }}"
+          body: |
+            Automatically bumped version files for release ${{ github.ref_name }}
+            
+            - `ha-addon-x728/config.yaml`
+            - `custom_components/x728/manifest.json`
+          branch: version-bump-${{ github.ref_name }}
+          base: ${{ github.event.repository.default_branch }}
+          delete-branch: true
+
+      - name: Enable auto-merge for PR
+        if: steps.cpr.outputs.pull-request-number
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git add ha-addon-x728/config.yaml custom_components/x728/manifest.json
-
-          # Only commit if there is actually a change
-          if git diff --cached --quiet; then
-            echo "No version change – skipping commit."
-          else
-            git commit -m "chore: bump version to ${{ github.ref_name }} [skip ci]"
-            git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git HEAD:${{ github.event.repository.default_branch }}
-          fi
-
-      - name: Move tag to new commit
+          gh pr merge --auto --merge "${{ steps.cpr.outputs.pull-request-number }}" || true
         env:
-          PAT_TOKEN: ${{ secrets.PAT_PUSH }}
-        run: |
-          # Re-point the tag at the version-bump commit so the build
-          # workflow picks up the updated files.
-          git tag -f ${{ github.ref_name }}
-          git push https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}.git ${{ github.ref_name }} --force
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
