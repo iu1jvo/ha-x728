@@ -9,6 +9,8 @@ repos:
     rev: v3.1.0
     hooks:
       - id: pylint
+        additional_dependencies:
+          - homeassistant
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
