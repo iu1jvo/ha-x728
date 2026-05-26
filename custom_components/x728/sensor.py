@@ -35,6 +35,7 @@ async def async_setup_entry(
 class X728BaseSensor(CoordinatorEntity, SensorEntity):
     """Base class for X728 sensors."""
 
+    # pylint: disable=too-many-arguments
     def __init__(
         self,
         coordinator: X728DataCoordinator,
@@ -76,6 +77,7 @@ class X728VoltageSensor(X728BaseSensor):
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfElectricPotential.VOLT
         self._attr_suggested_display_precision = 2
+        self._attr_icon = "mdi:current-dc"
 
 
 class X728CapacitySensor(X728BaseSensor):
@@ -89,6 +91,7 @@ class X728CapacitySensor(X728BaseSensor):
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_suggested_display_precision = 0
+        self._attr_icon = "mdi:battery"
 
 
 class X728HwVersionSensor(X728BaseSensor):

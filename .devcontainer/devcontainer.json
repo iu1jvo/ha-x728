@@ -34,18 +34,14 @@
 		"editor.formatOnType": true,
 		"files.trimTrailingWhitespace": true,
 		"yaml.customTags": [
-            "!input scalar",
-            "!secret scalar",
-            "!include_dir_named scalar",
-            "!include_dir_list scalar",
-            "!include_dir_merge_list scalar",
-            "!include_dir_merge_named scalar"
-          ]
+			"!input scalar",
+			"!secret scalar",
+			"!include_dir_named scalar",
+			"!include_dir_list scalar",
+			"!include_dir_merge_list scalar",
+			"!include_dir_merge_named scalar"
+		]
 	},
-	"postCreateCommand":  ["ln -sf ${containerWorkspaceFolder}/custom_components/x728 /config/custom_components/x728",
-							"cp ${containerWorkspaceFolder}/.devcontainer/start.sh /start.sh"
-						],
+	"postCreateCommand": "bash .devcontainer/setup.sh ${containerWorkspaceFolder}",
 	"postStartCommand": "bash /start.sh"
-
-
 }
