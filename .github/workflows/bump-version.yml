@@ -1,10 +1,11 @@
 name: Bump Version Files
 
-# Runs BEFORE the build workflow.
-# When you push a tag vX.Y.Z this workflow:
-#   1. Updates version in custom_components/meteobridge/manifest.json
-#   2. Creates a pull request with the changes
-#   3. Auto-merges the PR to main
+# Runs when a tag vX.Y.Z is pushed.
+# This workflow:
+#   1. Bumps version in ha-addon-x728/config.yaml and custom_components/x728/manifest.json
+#   2. Commits the changes
+#   3. Moves the tag to point to the new commit
+#   4. Creates a GitHub Release with changelog
 
 on:
   push:
@@ -12,12 +13,11 @@ on:
       - "v*.*.*"
 
 jobs:
-  bump-versions:
-    name: Bump version files to ${{ github.ref_name }}
+  bump-and-release:
+    name: Bump version and create release for ${{ github.ref_name }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
 
     steps:
       - name: Checkout repository (full history)
@@ -88,25 +88,50 @@ jobs:
           print(f"manifest.json: {old} → {version}")
           EOF
 
-      - name: Create Pull Request
-        id: cpr
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: bump version to ${{ github.ref_name }}"
-          title: "chore: bump version to ${{ github.ref_name }}"
-          body: |
-            Automatically bumped version files for release ${{ github.ref_name }}
-            
-            - `ha-addon-x728/config.yaml`
-            - `custom_components/x728/manifest.json`
-          branch: version-bump-${{ github.ref_name }}
-          base: ${{ github.event.repository.default_branch }}
-          delete-branch: true
-
-      - name: Enable auto-merge for PR
-        if: steps.cpr.outputs.pull-request-number
+      - name: Configure git
         run: |
-          gh pr merge --auto --merge "${{ steps.cpr.outputs.pull-request-number }}" || true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit version bump
+        run: |
+          git add ha-addon-x728/config.yaml custom_components/x728/manifest.json
+          git commit -m "chore: bump version to ${{ github.ref_name }}"
+
+      - name: Delete local tag and move it to new commit
+        run: |
+          git tag -d ${{ github.ref_name }}
+          git tag ${{ github.ref_name }}
+
+      - name: Push commit and tag
+        run: |
+          git push origin ${{ github.event.repository.default_branch }}
+          git push -f origin ${{ github.ref_name }}
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            LOG=$(git log --pretty=format:"- %s (%h)" | head -20)
+          else
+            LOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)")
+          fi
+          echo "log<<EOF" >> $GITHUB_OUTPUT
+          echo "$LOG"     >> $GITHUB_OUTPUT
+          echo "EOF"      >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          body: |
+            ## What's changed
+            ${{ steps.changelog.outputs.log }}
+
+            ## Installation
+            Install or update via [HACS](https://hacs.xyz), oppure copia manualmente
+            la cartella `custom_components/x728` nella tua installazione Home Assistant.
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
