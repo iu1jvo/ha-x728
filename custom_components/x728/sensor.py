@@ -6,8 +6,14 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
+
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricPotential,
+    EntityCategory,
+)
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfElectricPotential
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -102,4 +108,4 @@ class X728HwVersionSensor(X728BaseSensor):
             coordinator, entry, KEY_HW_VERSION, "X728 Hardware Version", "hw_version"
         )
         self._attr_icon = "mdi:chip"
-        self._attr_entity_category = "diagnostic"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
