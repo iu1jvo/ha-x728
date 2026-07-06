@@ -2,10 +2,10 @@
 
 [![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/iu1jvo6)
 [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/giulianofavro)
-[![GitHub release](https://img.shields.io/github/v/release/iu1jvo/ha-x728?style=flat-square)](https://github.com/iu1jvo/ha-x728/releases/latest)
-[![GitHub license](https://img.shields.io/github/license/iu1jvo/ha-x728?style=flat-square)](https://github.com/iu1jvo/ha-x728/blob/master/LICENSE)
-[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg?style=flat-square)](https://github.com/hacs/integration)
-[![Comunity Forum](https://img.shields.io/badge/Community-Forum-success?style=flat-square)](https://community.home-assistant.io/t/home-assistant-app-and-integration-for-x728/1011185)
+[![GitHub release](https://img.shields.io/github/v/release/iu1jvo/ha-x728)](https://github.com/iu1jvo/ha-x728/releases/latest)
+[![GitHub license](https://img.shields.io/github/license/iu1jvo/ha-x728)](https://github.com/iu1jvo/ha-x728/blob/master/LICENSE)
+[![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
+[![Comunity Forum](https://img.shields.io/badge/Community-Forum-success)](https://community.home-assistant.io/t/home-assistant-app-and-integration-for-x728/1011185)
 
 
 ## Index
