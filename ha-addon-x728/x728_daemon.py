@@ -31,7 +31,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 # ---------------------------------------------------------------------------
 # Read configuration from environment variables (set by the add-on config)
 # ---------------------------------------------------------------------------
-HW_VERSION = os.environ.get("HW_VERSION", "v2.1")   # "v1.x / v2.0" or "v2.1+"
+HW_VERSION = os.environ.get("HW_VERSION", "v2.1")   # supported values: v1, v2.0, v2.1+
 PORT = int(os.environ.get("DAEMON_PORT", "8099"))
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))   # seconds
 
@@ -46,13 +46,41 @@ GPIO_CHIP = os.environ.get("GPIO_CHIP", "autodetect")
 
 CHIP_FALLBACK = "/dev/gpiochip0"  # used if autodetect fails
 
-# GPIO pin selection based on hardware version
-if HW_VERSION.startswith("v1") or HW_VERSION == "v2.0":
+
+def normalize_hw_version(hw_version: str) -> str:
+    """Normalize hardware version strings to the groups we actually support."""
+    value = (hw_version or "").strip().lower().replace(" ", "")
+    aliases = {
+        "v1": "v1",
+        "v1.x": "v1",
+        "v1.x/v2.0": "v1",
+        "v2.0": "v2.0",
+        "v2.1": "v2.1+",
+        "v2.1+": "v2.1+",
+    }
+    if value in aliases:
+        return aliases[value]
+    if value.startswith("v2.") and value[3:]:
+        try:
+            int(value[3:].replace(".", ""))
+        except ValueError:
+            pass
+        else:
+            return "v2.1+"
+    return "v2.1+"
+
+
+# GPIO pin selection based on the supported hardware families
+HW_VERSION_NORMALIZED = normalize_hw_version(HW_VERSION)
+if HW_VERSION_NORMALIZED == "v1":
     GPIO_SHUTDOWN = 13
-    HW_LABEL = "X728 v1.x/v2.0"
+    HW_LABEL = "X728 v1"
+elif HW_VERSION_NORMALIZED == "v2.0":
+    GPIO_SHUTDOWN = 13
+    HW_LABEL = "X728 v2.0"
 else:
     GPIO_SHUTDOWN = 26
-    HW_LABEL = f"X728 {HW_VERSION}"
+    HW_LABEL = "X728 v2.1+"
 
 GPIO_PLD = 6
 GPIO_BUZZER = 20
