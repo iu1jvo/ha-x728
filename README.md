@@ -60,14 +60,14 @@ To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assist
 | 12 | OUT | BOOT – held HIGH while system is running |
 | 13 | OUT | Shutdown trigger (**v1.x / v2.0** only) |
 | 20 | OUT | Buzzer |
-| 26 | OUT | Shutdown trigger (**v2.1 / v2.2 / v2.3**) |
+| 26 | OUT | Shutdown trigger (**v2.1 / v2.2 / v2.3 / v2.4 / v2.5**) |
 ---
 
 ## App configuration options
 
 | Option | Default | Description |
 |---|---|---|
-| `hw_version` | `v2.1` | Hardware version — selects shutdown GPIO pin (13 for v1.x/v2.0, 26 for v2.1+) |
+| `hw_version` | `v2.1` | Hardware version — selects shutdown GPIO pin (13 for v1.x/v2.0, 26 for v2.1+ up to v2.5) |
 | `daemon_port` | `8099` | TCP port the REST API listens on |
 | `poll_interval` | `10` | How often to read hardware (seconds) |
 | `shutdown_voltage` | `3.00` | Shutdown if battery voltage < this value (V). Set `0` to disable. |

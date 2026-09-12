@@ -12,12 +12,6 @@ DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 8099
 DEFAULT_SCAN_INTERVAL = 30  # seconds
 
-# Hardware version GPIO mapping
-HW_VERSION_GPIO = {
-    "v1.x / v2.0": 13,
-    "v2.1 / v2.2 / v2.3": 26,
-}
-
 # Sensor keys returned by the daemon API
 KEY_VOLTAGE = "voltage"
 KEY_CAPACITY = "capacity"
