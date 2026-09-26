@@ -1,6 +1,6 @@
 # ha-x728 — Geekworm X728 UPS for Home Assistant OS
 
-[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/iu1jvo6)
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/iu1jvo)
 [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/giulianofavro)
 [![GitHub release](https://img.shields.io/github/v/release/iu1jvo/ha-x728)](https://github.com/iu1jvo/ha-x728/releases/latest)
 [![GitHub license](https://img.shields.io/github/license/iu1jvo/ha-x728)](https://github.com/iu1jvo/ha-x728/blob/master/LICENSE)
