@@ -4,7 +4,9 @@
 [![PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/giulianofavro)
 [![GitHub release](https://img.shields.io/github/v/release/iu1jvo/ha-x728)](https://github.com/iu1jvo/ha-x728/releases/latest)
 [![GitHub license](https://img.shields.io/github/license/iu1jvo/ha-x728)](https://github.com/iu1jvo/ha-x728/blob/master/LICENSE)
-[![Home Assistant installs](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=HA%20installs&suffix=%20users&cacheSeconds=14400&url=[https://analytics.home-assistant.io/custom_integrations.json&query=$.meteobridge.total](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=HA%20installs&suffix=%20users&cacheSeconds=14400&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.x728.total))](https://github.com/iu1jvo/x728)
+
+[![Home Assistant installs](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=HA%20installs&suffix=%20users&cacheSeconds=14400&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.x728.total)](https://github.com/iu1jvo/ha-x728)
+
 [![HACS](https://img.shields.io/badge/HACS-Default-orange.svg)](https://github.com/hacs/integration)
 [![Comunity Forum](https://img.shields.io/badge/Community-Forum-success)](https://community.home-assistant.io/t/home-assistant-app-and-integration-for-x728/1011185)
 
