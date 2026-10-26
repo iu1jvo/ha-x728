@@ -26,7 +26,7 @@
 		"python.linting.enabled": true,
 		"python.linting.pylintArgs": [
 			"--disable",
-			"import-error"
+			"import-error,abstract-method"
 		],
 		"python.formatting.provider": "black",
 		"editor.formatOnPaste": false,

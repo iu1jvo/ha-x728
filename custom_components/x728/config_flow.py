@@ -1,16 +1,17 @@
 """Config flow for Geekworm X728 UPS integration."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 import aiohttp
-import async_timeout
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     DOMAIN,
@@ -25,7 +26,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class X728ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class X728ConfigFlow(  # pylint: disable=abstract-method
+    config_entries.ConfigFlow, domain=DOMAIN
+):
     """Handle the initial config flow for X728."""
 
     VERSION = 1
@@ -41,7 +44,7 @@ class X728ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             port = user_input[CONF_PORT]
 
             # Test connection to daemon
-            ok, err = await _test_connection(host, port)
+            ok, err = await _test_connection(self.hass, host, port)
             if ok:
                 await self.async_set_unique_id(f"x728_{host}_{port}")
                 self._abort_if_unique_id_configured()
@@ -69,17 +72,15 @@ class X728ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry):
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,  # pylint: disable=unused-argument
+    ) -> X728OptionsFlow:
         """Return the options flow handler."""
-        return X728OptionsFlow(config_entry)
+        return X728OptionsFlow()
 
 
 class X728OptionsFlow(config_entries.OptionsFlow):
     """Handle options for X728 (editable after setup)."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -108,17 +109,17 @@ class X728OptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(step_id="init", data_schema=schema)
 
 
-async def _test_connection(host: str, port: int) -> tuple[bool, str]:
+async def _test_connection(
+    hass: HomeAssistant, host: str, port: int
+) -> tuple[bool, str]:
     """Try to reach the daemon and return (success, error_key)."""
     url = f"http://{host}:{port}/api/x728"
+    session = async_get_clientsession(hass)
     try:
-        async with async_timeout.timeout(5):
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as resp:
-                    if resp.status == 200:
-                        return True, ""
-                    return False, "cannot_connect"
-    except aiohttp.ClientConnectorError:
+        async with asyncio.timeout(5):
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    return True, ""
+                return False, "cannot_connect"
+    except (aiohttp.ClientError, TimeoutError):
         return False, "cannot_connect"
-    except Exception:
-        return False, "unknown"
