@@ -61,7 +61,7 @@ To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assist
 | 12 | OUT | BOOT – held HIGH while system is running |
 | 13 | OUT | Shutdown trigger (**v1.x / v2.0** only) |
 | 20 | OUT | Buzzer |
-| 26 | OUT | Shutdown trigger (**v2.1 / v2.2 / v2.3 / v2.4 / v2.5**) |
+| 26 | OUT | Shutdown trigger (**v2.1 / v2.2 / v2.3 / v2.4 / v2.5**); left as INPUT (not driven) except while the pulse is sent |
 ---
 
 ## App configuration options
@@ -75,7 +75,11 @@ To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assist
 | `shutdown_capacity` | `5` | Shutdown if battery capacity < this value (%). Set `0` to disable. |
 | `shutdown_delay` | `10` | Grace delay (seconds) between the low-battery decision and the UPS shutdown pulse + host shutdown. If mains returns during this delay the shutdown is cancelled |
 | `ac_confirm_seconds` | `20` | A shutdown is started only if mains has been continuously absent for this long (ignores short interruptions and a flapping AC signal) |
+| `pulse_seconds` | `2.0` | Length of the UPS shutdown pulse (1.0-2.5 s). Geekworm says it must not exceed 2 s |
 | `buzzer_on_ac_loss` | `true` | Beep the buzzer when AC power is lost |
+| `buzzer_interval` | `10` | Seconds between beeps while AC is lost |
+| `buzzer_beep_ms` | `100` | Length of each beep (ms) |
+| `buzzer_volume` | `100` | Buzzer loudness (10-100 %), done with software PWM |
 ---
 
 ## Safe shutdown
@@ -99,6 +103,16 @@ Notes:
   charging the batteries (the AC status then flapped).
 - Leave some margin in the thresholds: with a very low `shutdown_capacity` the batteries may
   be exhausted before the shutdown completes. A value of 30 % worked on my hardware.
+
+---
+
+## Event log
+
+Important events (daemon start, AC lost/restored, shutdown sequence, cancel, pulse, Supervisor
+call, SIGTERM) are written both to the app log and to `/share/x728_events.log`
+(`map: share:rw`), with a timestamp and an `fsync` after every line, so the file survives the
+host shutdown. The file is rotated at 1 MB, keeping 3 old files (`x728_events.log.1` ...).
+`AC LOST` / `AC RESTORED` lines are written at most once every 3 s.
 
 ---
 

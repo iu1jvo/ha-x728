@@ -20,8 +20,11 @@ Hardware GPIO map:
 
 import json
 import logging
+import logging.handlers
 import os
+import signal
 import struct
+import sys
 import time
 import threading
 import pwd
@@ -39,10 +42,13 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))   # seconds
 SHUTDOWN_VOLTAGE = float(os.environ.get("SHUTDOWN_VOLTAGE", "3.00"))  # Volts
 SHUTDOWN_CAPACITY = int(os.environ.get("SHUTDOWN_CAPACITY", "5"))       # %
 SHUTDOWN_DELAY = int(os.environ.get("SHUTDOWN_DELAY", "10"))         # seconds
-PULSE_SECONDS = 2.0   # GPIO shutdown pulse; Geekworm: must not exceed 2 s
+PULSE_SECONDS = float(os.environ.get("PULSE_SECONDS", "2.0"))   # Geekworm: must not exceed 2 s
 AC_CONFIRM_SECONDS = int(os.environ.get("AC_CONFIRM_SECONDS", "20"))  # AC lost for this long
 
 BUZZER_ON_AC_LOSS = os.environ.get("BUZZER_ON_AC_LOSS", "true").lower() == "true"
+BUZZER_INTERVAL = int(os.environ.get("BUZZER_INTERVAL", "10"))   # seconds between beeps
+BUZZER_BEEP_MS = int(os.environ.get("BUZZER_BEEP_MS", "100"))    # beep length
+BUZZER_VOLUME = int(os.environ.get("BUZZER_VOLUME", "100"))      # 10-100 (software PWM duty %)
 # "autodetect" or specific path like "/dev/gpiochip0"
 GPIO_CHIP = os.environ.get("GPIO_CHIP", "autodetect")
 
@@ -190,8 +196,7 @@ def gpio_setup():
             output_value=gpiod.line.Value.ACTIVE,    # HIGH = system is up
         ),
         GPIO_SHUTDOWN: gpiod.LineSettings(
-            direction=gpiod.line.Direction.OUTPUT,
-            output_value=gpiod.line.Value.INACTIVE,
+            direction=gpiod.line.Direction.INPUT,   # idle: not driven
         ),
     }
 
@@ -239,6 +244,69 @@ def read_capacity(bus) -> int:
     return max(0, min(100, int(swapped / 256)))
 
 
+EVENT_LOG_PATH = os.environ.get("EVENT_LOG_PATH", "/share/x728_events.log")
+EVENT_LOG_MAX_BYTES = int(os.environ.get("EVENT_LOG_MAX_BYTES", "1000000"))  # 1 MB
+EVENT_LOG_BACKUPS = int(os.environ.get("EVENT_LOG_BACKUPS", "3"))
+
+
+class _FsyncRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """Rotating file handler that fsyncs after every record, so the last
+    events survive an immediate power cut. A write error is reported once on
+    stdout instead of a traceback for every event."""
+
+    _error_reported = False
+
+    def handleError(self, record):  # pylint: disable=invalid-name
+        if not self._error_reported:
+            self._error_reported = True
+            log.error("Event log write failed (%s): %s",
+                      self.baseFilename, sys.exc_info()[1])
+
+    def emit(self, record):
+        super().emit(record)
+        try:
+            if self.stream is not None:
+                os.fsync(self.stream.fileno())
+        except Exception:  # pylint: disable=broad-except
+            pass
+
+
+def _make_event_logger():
+    """Persistent event logger (events only, not every poll). Returns None if
+    the file cannot be created: a log problem must never block a shutdown."""
+    try:
+        handler = _FsyncRotatingFileHandler(
+            EVENT_LOG_PATH, maxBytes=EVENT_LOG_MAX_BYTES,
+            backupCount=EVENT_LOG_BACKUPS, encoding="utf-8", delay=True,
+        )
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
+        logger = logging.getLogger("x728.events")
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+        logger.addHandler(handler)
+        return logger
+    except Exception as err:  # pylint: disable=broad-except
+        log.error("Event log disabled (%s): %s", EVENT_LOG_PATH, err)
+        return None
+
+
+_event_logger = _make_event_logger()
+
+
+def evlog(msg: str):
+    """Log on stdout and in the persistent event log (/share, needs
+    ``map: share:rw``), which survives the host shutdown and is rotated at
+    EVENT_LOG_MAX_BYTES with EVENT_LOG_BACKUPS old files."""
+    log.warning(msg)
+    if _event_logger is None:
+        return
+    try:
+        _event_logger.info(msg)
+    except Exception:  # pylint: disable=broad-except
+        pass
+
+
 def supervisor_host_shutdown() -> bool:
     """Ask the Supervisor to shut down the host (graceful HAOS poweroff).
 
@@ -254,25 +322,42 @@ def supervisor_host_shutdown() -> bool:
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
-            log.warning("Supervisor host/shutdown -> HTTP %s", resp.status)
+            evlog(f"Supervisor host/shutdown -> HTTP {resp.status}")
             return True
     except Exception as e:  # pylint: disable=broad-except
-        log.error("Supervisor host/shutdown FAILED: %s", e)
+        evlog(f"Supervisor host/shutdown FAILED: {e}")
         return False
 
 
 def pulse_ups_shutdown():
-    """Send one HIGH pulse on the UPS shutdown pin.
+    """Send one HIGH pulse (PULSE_SECONDS, <= 2 s) on the UPS shutdown pin,
+    then return the pin to INPUT (not driven).
 
     The board cuts the 5 V output some tens of seconds after the pulse."""
     if not (GPIO_AVAILABLE and _gpio_request is not None):
-        log.error("Pulse SKIPPED: GPIO not available")
+        evlog("Pulse SKIPPED: GPIO not available")
         return
-    log.warning("Pulse GPIO%d HIGH for %.1fs", GPIO_SHUTDOWN, PULSE_SECONDS)
-    gpio_write(GPIO_SHUTDOWN, 1)
-    time.sleep(PULSE_SECONDS)
-    gpio_write(GPIO_SHUTDOWN, 0)
-    log.warning("Pulse finished")
+    out = gpiod.LineSettings(direction=gpiod.line.Direction.OUTPUT,
+                             output_value=gpiod.line.Value.INACTIVE)
+    inp = gpiod.LineSettings(direction=gpiod.line.Direction.INPUT)
+    try:
+        evlog(f"Pulse GPIO{GPIO_SHUTDOWN} HIGH for {PULSE_SECONDS}s")
+        _gpio_request.reconfigure_lines({GPIO_SHUTDOWN: out})
+        t0 = time.monotonic()
+        gpio_write(GPIO_SHUTDOWN, 1)
+        time.sleep(PULSE_SECONDS)
+        gpio_write(GPIO_SHUTDOWN, 0)
+        evlog(f"Measured HIGH time: {time.monotonic() - t0:.3f}s")
+        time.sleep(0.2)
+        _gpio_request.reconfigure_lines({GPIO_SHUTDOWN: inp})
+        evlog("Pulse finished, pin back to INPUT")
+    except Exception as e:  # pylint: disable=broad-except
+        evlog(f"Pulse FAILED: {e}")
+
+
+def _on_sigterm(signum, frame):  # pylint: disable=unused-argument
+    evlog("SIGTERM received")
+    os._exit(0)
 
 
 def _ac_ok_now() -> bool:
@@ -309,7 +394,7 @@ def ac_sampler():
             _ac_lost_since = None
         if lost != last:
             if last is not None and now - last_log >= 3:
-                log.warning("AC LOST" if lost else "AC RESTORED")
+                evlog("AC LOST" if lost else "AC RESTORED")
                 last_log = now
             last = lost
 
@@ -327,14 +412,14 @@ def do_shutdown():
     The pulse is sent BEFORE the host shutdown: HAOS stops the app container
     while shutting down, so a pulse sent afterwards may never be sent.
     Once the pulse has been sent the shutdown can no longer be cancelled."""
-    log.warning("SHUTDOWN SEQUENCE STARTED (delay %ds)", SHUTDOWN_DELAY)
+    evlog(f"SHUTDOWN SEQUENCE STARTED (delay {SHUTDOWN_DELAY}s)")
     deadline = time.monotonic() + SHUTDOWN_DELAY
     ok_count = 0
     while time.monotonic() < deadline:
         time.sleep(1)
         ok_count = ok_count + 1 if _ac_ok_now() else 0
         if ok_count >= 3:
-            log.warning("AC restored during delay: shutdown CANCELLED")
+            evlog("AC restored during delay: shutdown CANCELLED")
             with state_lock:
                 current_state["shutdown_triggered"] = False
             return
@@ -343,15 +428,45 @@ def do_shutdown():
     supervisor_host_shutdown()
 
 
-def buzzer_beep(count: int = 1, on_ms: int = 100, off_ms: int = 100):
-    """Sound the buzzer for the given number of pulses."""
+def buzzer_beep(on_ms: int = 100):
+    """One beep. BUZZER_VOLUME < 100 uses software PWM (1 kHz) to lower the loudness."""
     if not GPIO_AVAILABLE:
         return
-    for _ in range(count):
-        gpio_write(GPIO_BUZZER, 1)
-        time.sleep(on_ms / 1000)
+    try:
+        if BUZZER_VOLUME >= 100:
+            gpio_write(GPIO_BUZZER, 1)
+            time.sleep(on_ms / 1000)
+        else:
+            period = 0.001
+            on = period * max(BUZZER_VOLUME, 5) / 100
+            end = time.monotonic() + on_ms / 1000
+            while time.monotonic() < end:
+                gpio_write(GPIO_BUZZER, 1)
+                time.sleep(on)
+                gpio_write(GPIO_BUZZER, 0)
+                time.sleep(period - on)
+    finally:
         gpio_write(GPIO_BUZZER, 0)
-        time.sleep(off_ms / 1000)
+
+
+def buzzer_loop():
+    """Beep every BUZZER_INTERVAL seconds while AC is lost."""
+    last = -1e9
+    while True:
+        time.sleep(1)
+        if not (GPIO_AVAILABLE and _gpio_request is not None and BUZZER_ON_AC_LOSS):
+            continue
+        with state_lock:
+            ac = current_state.get("ac_present")
+        if ac is not False:
+            last = -1e9
+            continue
+        if time.monotonic() - last >= BUZZER_INTERVAL:
+            last = time.monotonic()
+            try:
+                buzzer_beep(BUZZER_BEEP_MS)
+            except Exception as e:  # pylint: disable=broad-except
+                log.error("Buzzer error: %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +488,7 @@ def monitor_loop():
         except Exception as e:  # pylint: disable=broad-except
             log.error("Cannot open I2C bus: %s", e)
 
+    started_logged = False
     while True:
         try:
             voltage = read_voltage(bus) if bus else None
@@ -393,6 +509,9 @@ def monitor_loop():
             # Charging: AC present and not full
             charging = bool(ac_present and capacity is not None and capacity < 100)
 
+            if not started_logged:
+                started_logged = True
+                evlog(f"DAEMON START: V={voltage} cap={capacity}% AC_present={ac_present}")
             with state_lock:
                 current_state.update({
                     "voltage":   voltage,
@@ -402,11 +521,6 @@ def monitor_loop():
                     "charging":  charging,
                     "error":     None,
                 })
-
-            # --- AC loss buzzer ---
-            if GPIO_AVAILABLE and _gpio_request is not None \
-                    and BUZZER_ON_AC_LOSS and ac_present is False:
-                buzzer_beep(count=1, on_ms=100, off_ms=100)
 
             # --- Shutdown logic (only while running on battery) ---
             with state_lock:
@@ -471,7 +585,9 @@ if __name__ == "__main__":
     )
     log.info("Script executed by: %s (UID: %d)", pwd.getpwuid(os.getuid()).pw_name, os.getuid())
 
+    signal.signal(signal.SIGTERM, _on_sigterm)
     threading.Thread(target=ac_sampler, daemon=True, name="x728-ac").start()
+    threading.Thread(target=buzzer_loop, daemon=True, name="x728-buzzer").start()
     monitor = threading.Thread(target=monitor_loop, daemon=True, name="x728-monitor")
     monitor.start()
 
