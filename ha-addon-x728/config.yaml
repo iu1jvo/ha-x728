@@ -37,6 +37,7 @@ options:
   shutdown_voltage: 3.0
   shutdown_capacity: 5
   shutdown_delay: 10
+  ac_confirm_seconds: 20
   buzzer_on_ac_loss: true
   gpio_chip: "autodetect"
 
@@ -47,6 +48,7 @@ schema:
   shutdown_voltage: float(0.0,4.5)
   shutdown_capacity: int(0,50)
   shutdown_delay: int(5,120)
+  ac_confirm_seconds: int(5,120)
   buzzer_on_ac_loss: bool
   gpio_chip: "list(autodetect|/dev/gpiochip0|/dev/gpiochip1|/dev/gpiochip2|/dev/gpiochip3|/dev/gpiochip4)"
 

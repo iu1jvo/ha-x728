@@ -73,14 +73,16 @@ To enable the I2C bus on HAOS, [follow this istructions](https://www.home-assist
 | `poll_interval` | `10` | How often to read hardware (seconds) |
 | `shutdown_voltage` | `3.00` | Shutdown if battery voltage < this value (V). Set `0` to disable. |
 | `shutdown_capacity` | `5` | Shutdown if battery capacity < this value (%). Set `0` to disable. |
-| `shutdown_delay` | `10` | Grace delay (seconds) between the low-battery decision and the UPS shutdown pulse + host shutdown |
+| `shutdown_delay` | `10` | Grace delay (seconds) between the low-battery decision and the UPS shutdown pulse + host shutdown. If mains returns during this delay the shutdown is cancelled |
+| `ac_confirm_seconds` | `20` | A shutdown is started only if mains has been continuously absent for this long (ignores short interruptions and a flapping AC signal) |
 | `buzzer_on_ac_loss` | `true` | Beep the buzzer when AC power is lost |
 ---
 
 ## Safe shutdown
 
-When the battery falls below `shutdown_voltage` or `shutdown_capacity`, the app waits
-`shutdown_delay` seconds, sends a 2 s pulse on the shutdown GPIO and then asks the
+When the battery falls below `shutdown_voltage` or `shutdown_capacity` **and mains has been
+absent for `ac_confirm_seconds`**, the app waits `shutdown_delay` seconds (the shutdown is
+cancelled if mains returns during the delay), sends a 2 s pulse on the shutdown GPIO and then asks the
 Supervisor to shut down the host (`POST /host/shutdown`, which is why the app needs
 `hassio_api: true` and `hassio_role: manager`). The X728 cuts the 5 V output some tens of
 seconds after the pulse and, with the "Auto ON" jumper fitted, powers the Pi again when mains
@@ -91,7 +93,8 @@ Notes:
 - The pulse is sent **before** the host shutdown, because HAOS stops the app container while
   shutting down. The pulse must not be longer than 2 s (Geekworm).
 - Once the pulse has been sent the shutdown cannot be cancelled. If mains returns while the
-  board is cutting power, the Pi may stay off until the board's power button is pressed.
+  board is cutting power (about 80 s after the pulse), or in the last 1-2 s of the delay, the
+  Pi may stay off until the board's power button is pressed.
 - Use a 5 V / 4 A power supply: a 5 V / 3 A one was overloaded while the Pi was running and
   charging the batteries (the AC status then flapped).
 - Leave some margin in the thresholds: with a very low `shutdown_capacity` the batteries may
