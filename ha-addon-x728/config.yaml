@@ -3,6 +3,11 @@ description: "Reads battery voltage, capacity and AC status from the Geekworm X7
 version: "1.0.4"
 slug: "x728-daemon"
 init: false
+
+# Needed to call the Supervisor API (POST /host/shutdown) for a clean shutdown
+hassio_api: true
+hassio_role: manager
+
 arch:
   - aarch64
 
