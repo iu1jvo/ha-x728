@@ -22,10 +22,10 @@ import json
 import logging
 import os
 import struct
-import subprocess
 import time
 import threading
 import pwd
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,8 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))   # seconds
 SHUTDOWN_VOLTAGE = float(os.environ.get("SHUTDOWN_VOLTAGE", "3.00"))  # Volts
 SHUTDOWN_CAPACITY = int(os.environ.get("SHUTDOWN_CAPACITY", "5"))       # %
 SHUTDOWN_DELAY = int(os.environ.get("SHUTDOWN_DELAY", "10"))         # seconds
+PULSE_SECONDS = 2.0   # GPIO shutdown pulse; Geekworm: must not exceed 2 s
+AC_CONFIRM_SECONDS = int(os.environ.get("AC_CONFIRM_SECONDS", "20"))  # AC lost for this long
 
 BUZZER_ON_AC_LOSS = os.environ.get("BUZZER_ON_AC_LOSS", "true").lower() == "true"
 # "autodetect" or specific path like "/dev/gpiochip0"
@@ -229,27 +231,116 @@ def read_voltage(bus) -> float:
 
 
 def read_capacity(bus) -> int:
-    """Read battery capacity from MAX17040 via I2C."""
+    """Read battery capacity from MAX17040 via I2C (clamped to 0-100 %).
+
+    The MAX17040 state of charge can exceed 100 % (103 % seen on a full pack)."""
     raw = bus.read_word_data(I2C_ADDR, 4)
     swapped = struct.unpack("<H", struct.pack(">H", raw))[0]
-    return int(swapped / 256)
+    return max(0, min(100, int(swapped / 256)))
+
+
+def supervisor_host_shutdown() -> bool:
+    """Ask the Supervisor to shut down the host (graceful HAOS poweroff).
+
+    Needs ``hassio_api: true`` and ``hassio_role: manager`` in config.yaml."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        log.error("SUPERVISOR_TOKEN missing: hassio_api not enabled?")
+        return False
+    req = urllib.request.Request(
+        "http://supervisor/host/shutdown", data=b"{}", method="POST",
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            log.warning("Supervisor host/shutdown -> HTTP %s", resp.status)
+            return True
+    except Exception as e:  # pylint: disable=broad-except
+        log.error("Supervisor host/shutdown FAILED: %s", e)
+        return False
+
+
+def pulse_ups_shutdown():
+    """Send one HIGH pulse on the UPS shutdown pin.
+
+    The board cuts the 5 V output some tens of seconds after the pulse."""
+    if not (GPIO_AVAILABLE and _gpio_request is not None):
+        log.error("Pulse SKIPPED: GPIO not available")
+        return
+    log.warning("Pulse GPIO%d HIGH for %.1fs", GPIO_SHUTDOWN, PULSE_SECONDS)
+    gpio_write(GPIO_SHUTDOWN, 1)
+    time.sleep(PULSE_SECONDS)
+    gpio_write(GPIO_SHUTDOWN, 0)
+    log.warning("Pulse finished")
+
+
+def _ac_ok_now() -> bool:
+    """True if the PLD pin says AC is present (LOW = AC ok)."""
+    try:
+        return bool(GPIO_AVAILABLE and _gpio_request is not None
+                    and not gpio_read(GPIO_PLD))
+    except Exception:  # pylint: disable=broad-except
+        return False
+
+
+_ac_lost_since = None  # monotonic time since AC has been continuously lost
+
+
+def ac_sampler():
+    """Sample the PLD pin every second and remember for how long AC has been
+    lost without interruption (a flapping PLD signal keeps resetting it)."""
+    global _ac_lost_since  # pylint: disable=global-statement
+    last = None
+    last_log = 0.0
+    while True:
+        time.sleep(1)
+        if not (GPIO_AVAILABLE and _gpio_request is not None):
+            continue
+        try:
+            lost = bool(gpio_read(GPIO_PLD))
+        except Exception:  # pylint: disable=broad-except
+            continue
+        now = time.monotonic()
+        if lost:
+            if _ac_lost_since is None:
+                _ac_lost_since = now
+        else:
+            _ac_lost_since = None
+        if lost != last:
+            if last is not None and now - last_log >= 3:
+                log.warning("AC LOST" if lost else "AC RESTORED")
+                last_log = now
+            last = lost
+
+
+def ac_lost_confirmed() -> bool:
+    """True once AC has been continuously lost for AC_CONFIRM_SECONDS."""
+    since = _ac_lost_since
+    return since is not None and time.monotonic() - since >= AC_CONFIRM_SECONDS
 
 
 def do_shutdown():
-    """Perform a graceful HA shutdown then cut UPS power."""
-    log.warning("SHUTDOWN SEQUENCE STARTED")
-    # 1. Ask HA OS to shut down gracefully
-    try:
-        subprocess.run(["ha", "os", "shutdown"], timeout=30, check=False)
-    except Exception as e:  # pylint: disable=broad-except
-        log.error("Failed to call 'ha os shutdown': %s", e)
-    # 2. Wait for OS to settle, then pulse the UPS shutdown pin
-    time.sleep(SHUTDOWN_DELAY)
-    # ac_present
-    if GPIO_AVAILABLE and _gpio_request is not None:
-        gpio_write(GPIO_SHUTDOWN, 1)
-        time.sleep(3)
-        gpio_write(GPIO_SHUTDOWN, 0)
+    """Grace delay (cancelled if AC returns), UPS shutdown pulse, then
+    graceful HAOS shutdown.
+
+    The pulse is sent BEFORE the host shutdown: HAOS stops the app container
+    while shutting down, so a pulse sent afterwards may never be sent.
+    Once the pulse has been sent the shutdown can no longer be cancelled."""
+    log.warning("SHUTDOWN SEQUENCE STARTED (delay %ds)", SHUTDOWN_DELAY)
+    deadline = time.monotonic() + SHUTDOWN_DELAY
+    ok_count = 0
+    while time.monotonic() < deadline:
+        time.sleep(1)
+        ok_count = ok_count + 1 if _ac_ok_now() else 0
+        if ok_count >= 3:
+            log.warning("AC restored during delay: shutdown CANCELLED")
+            with state_lock:
+                current_state["shutdown_triggered"] = False
+            return
+    pulse_ups_shutdown()
+    time.sleep(1)
+    supervisor_host_shutdown()
 
 
 def buzzer_beep(count: int = 1, on_ms: int = 100, off_ms: int = 100):
@@ -281,8 +372,6 @@ def monitor_loop():
             bus = smbus2.SMBus(I2C_BUS)
         except Exception as e:  # pylint: disable=broad-except
             log.error("Cannot open I2C bus: %s", e)
-
-    shutdown_pending = False
 
     while True:
         try:
@@ -319,9 +408,10 @@ def monitor_loop():
                     and BUZZER_ON_AC_LOSS and ac_present is False:
                 buzzer_beep(count=1, on_ms=100, off_ms=100)
 
-            # --- Shutdown logic ---
-            if battery_low and not shutdown_pending:
-                shutdown_pending = True
+            # --- Shutdown logic (only while running on battery) ---
+            with state_lock:
+                already = current_state.get("shutdown_triggered")
+            if battery_low and ac_lost_confirmed() and not already:
                 log.warning(
                     "Battery critical (%.2fV / %d%%) – initiating shutdown in %ds",
                     voltage or 0, capacity or 0, SHUTDOWN_DELAY,
@@ -381,6 +471,7 @@ if __name__ == "__main__":
     )
     log.info("Script executed by: %s (UID: %d)", pwd.getpwuid(os.getuid()).pw_name, os.getuid())
 
+    threading.Thread(target=ac_sampler, daemon=True, name="x728-ac").start()
     monitor = threading.Thread(target=monitor_loop, daemon=True, name="x728-monitor")
     monitor.start()
 
