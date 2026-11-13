@@ -3,6 +3,15 @@ description: "Reads battery voltage, capacity and AC status from the Geekworm X7
 version: "1.0.4"
 slug: "x728-daemon"
 init: false
+
+# Needed to call the Supervisor API (POST /host/shutdown) for a clean shutdown
+hassio_api: true
+hassio_role: manager
+
+# Persistent event log in /share (survives the host shutdown)
+map:
+  - share:rw
+
 arch:
   - aarch64
 
@@ -32,7 +41,12 @@ options:
   shutdown_voltage: 3.0
   shutdown_capacity: 5
   shutdown_delay: 10
+  ac_confirm_seconds: 20
+  pulse_seconds: 2.0
   buzzer_on_ac_loss: true
+  buzzer_interval: 10
+  buzzer_beep_ms: 100
+  buzzer_volume: 100
   gpio_chip: "autodetect"
 
 schema:
@@ -42,7 +56,12 @@ schema:
   shutdown_voltage: float(0.0,4.5)
   shutdown_capacity: int(0,50)
   shutdown_delay: int(5,120)
+  ac_confirm_seconds: int(5,120)
+  pulse_seconds: float(1.0,2.5)
   buzzer_on_ac_loss: bool
+  buzzer_interval: int(5,300)
+  buzzer_beep_ms: int(20,500)
+  buzzer_volume: int(10,100)
   gpio_chip: "list(autodetect|/dev/gpiochip0|/dev/gpiochip1|/dev/gpiochip2|/dev/gpiochip3|/dev/gpiochip4)"
 
 image: "ghcr.io/iu1jvo/ha-addon-x728"
