@@ -231,10 +231,12 @@ def read_voltage(bus) -> float:
 
 
 def read_capacity(bus) -> int:
-    """Read battery capacity from MAX17040 via I2C."""
+    """Read battery capacity from MAX17040 via I2C (clamped to 0-100 %).
+
+    The MAX17040 state of charge can exceed 100 % (103 % seen on a full pack)."""
     raw = bus.read_word_data(I2C_ADDR, 4)
     swapped = struct.unpack("<H", struct.pack(">H", raw))[0]
-    return int(swapped / 256)
+    return max(0, min(100, int(swapped / 256)))
 
 
 def supervisor_host_shutdown() -> bool:
