@@ -22,10 +22,10 @@ import json
 import logging
 import os
 import struct
-import subprocess
 import time
 import threading
 import pwd
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,7 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))   # seconds
 SHUTDOWN_VOLTAGE = float(os.environ.get("SHUTDOWN_VOLTAGE", "3.00"))  # Volts
 SHUTDOWN_CAPACITY = int(os.environ.get("SHUTDOWN_CAPACITY", "5"))       # %
 SHUTDOWN_DELAY = int(os.environ.get("SHUTDOWN_DELAY", "10"))         # seconds
+PULSE_SECONDS = 2.0   # GPIO shutdown pulse; Geekworm: must not exceed 2 s
 
 BUZZER_ON_AC_LOSS = os.environ.get("BUZZER_ON_AC_LOSS", "true").lower() == "true"
 # "autodetect" or specific path like "/dev/gpiochip0"
@@ -235,21 +236,52 @@ def read_capacity(bus) -> int:
     return int(swapped / 256)
 
 
-def do_shutdown():
-    """Perform a graceful HA shutdown then cut UPS power."""
-    log.warning("SHUTDOWN SEQUENCE STARTED")
-    # 1. Ask HA OS to shut down gracefully
+def supervisor_host_shutdown() -> bool:
+    """Ask the Supervisor to shut down the host (graceful HAOS poweroff).
+
+    Needs ``hassio_api: true`` and ``hassio_role: manager`` in config.yaml."""
+    token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not token:
+        log.error("SUPERVISOR_TOKEN missing: hassio_api not enabled?")
+        return False
+    req = urllib.request.Request(
+        "http://supervisor/host/shutdown", data=b"{}", method="POST",
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"},
+    )
     try:
-        subprocess.run(["ha", "os", "shutdown"], timeout=30, check=False)
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            log.warning("Supervisor host/shutdown -> HTTP %s", resp.status)
+            return True
     except Exception as e:  # pylint: disable=broad-except
-        log.error("Failed to call 'ha os shutdown': %s", e)
-    # 2. Wait for OS to settle, then pulse the UPS shutdown pin
+        log.error("Supervisor host/shutdown FAILED: %s", e)
+        return False
+
+
+def pulse_ups_shutdown():
+    """Send one HIGH pulse on the UPS shutdown pin.
+
+    The board cuts the 5 V output some tens of seconds after the pulse."""
+    if not (GPIO_AVAILABLE and _gpio_request is not None):
+        log.error("Pulse SKIPPED: GPIO not available")
+        return
+    log.warning("Pulse GPIO%d HIGH for %.1fs", GPIO_SHUTDOWN, PULSE_SECONDS)
+    gpio_write(GPIO_SHUTDOWN, 1)
+    time.sleep(PULSE_SECONDS)
+    gpio_write(GPIO_SHUTDOWN, 0)
+    log.warning("Pulse finished")
+
+
+def do_shutdown():
+    """Grace delay, UPS shutdown pulse, then graceful HAOS shutdown.
+
+    The pulse is sent BEFORE the host shutdown: HAOS stops the app container
+    while shutting down, so a pulse sent afterwards may never be sent."""
+    log.warning("SHUTDOWN SEQUENCE STARTED (delay %ds)", SHUTDOWN_DELAY)
     time.sleep(SHUTDOWN_DELAY)
-    # ac_present
-    if GPIO_AVAILABLE and _gpio_request is not None:
-        gpio_write(GPIO_SHUTDOWN, 1)
-        time.sleep(3)
-        gpio_write(GPIO_SHUTDOWN, 0)
+    pulse_ups_shutdown()
+    time.sleep(1)
+    supervisor_host_shutdown()
 
 
 def buzzer_beep(count: int = 1, on_ms: int = 100, off_ms: int = 100):
